@@ -1,0 +1,19 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata: 
+  name: multiple-step
+spec:
+  steps:
+    - name: first
+      image: ubuntu
+      command:
+        - /bin/bash
+        - -c
+        - echo "first step is running....."
+    - name: second
+      image: ubuntu
+      command:
+        - /bin/bash
+        - -c
+        - echo "second task is running....."
+
