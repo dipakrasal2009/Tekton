@@ -1,0 +1,12 @@
+apiVersion: tekton.dev/v1beta1
+kind: PipelineResource
+metadata:
+  name: source-repo
+spec:
+  type: git
+  params:
+    - name: url
+      value: https://github.com/dipakrasal2009/ip-viewer-app.git
+    - name: revision
+      value: main
+

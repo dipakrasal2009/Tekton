@@ -1,0 +1,23 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: docker-build-push-task
+spec:
+  params:
+    - name: IMAGE
+      type: string
+  workspaces:
+    - name: source
+  steps:
+    - name: build-and-push
+      image: gcr.io/kaniko-project/executor:latest
+      env:
+        - name: DOCKER_CONFIG
+          value: /tekton/home/.docker/
+      script: |
+        /kaniko/executor \
+          --dockerfile=$(workspaces.source.path)/Dockerfile \
+          --destination=$(params.IMAGE) \
+          --context=$(workspaces.source.path) \
+          --skip-tls-verify
+
