@@ -1,0 +1,105 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: buildah-build-push
+  namespace: tekton-ci
+  labels:
+    app.kubernetes.io/version: "0.4"
+  annotations:
+    tekton.dev/pipelines.minVersion: "0.17.0"
+    tekton.dev/categories: Image Build
+    tekton.dev/tags: image-build
+    tekton.dev/displayName: "Buildah Build and Push with Commit SHA"
+spec:
+  description: >-
+    Buildah task builds source into a container image using the commit SHA as tag
+    and then pushes it to Docker Hub registry.
+  params:
+  - name: IMAGE_NAME
+    description: Name of the image (without tag) - e.g. your-username/your-app
+    type: string
+  - name: COMMIT_SHA
+    description: Git commit SHA to use as image tag
+    type: string
+  - name: DOCKERFILE
+    description: Path to the Dockerfile to build.
+    default: ./Dockerfile
+  - name: CONTEXT
+    description: Path to the directory to use as context.
+    default: .
+  - name: BUILDER_IMAGE
+    description: The location of the buildah builder image.
+    default: quay.io/buildah/stable:v1.23.1
+  - name: STORAGE_DRIVER
+    description: Set buildah storage driver
+    default: overlay
+  - name: TLSVERIFY
+    description: Verify the TLS on the registry endpoint
+    default: "true"
+  - name: FORMAT
+    description: The format of the built container, oci or docker
+    default: "docker"
+  workspaces:
+  - name: source
+    description: A workspace containing the source to build.
+  - name: dockerconfig
+    description: An optional workspace that allows providing a .docker/config.json file
+    optional: true
+  results:
+  - name: IMAGE_DIGEST
+    description: Digest of the image just built.
+  - name: IMAGE_URL
+    description: Image repository where the built image was pushed to
+  steps:
+  - name: build-and-push
+    image: $(params.BUILDER_IMAGE)
+    workingDir: $(workspaces.source.path)
+    script: |
+      #!/bin/bash
+      set -e
+
+      # Use commit SHA as tag (first 8 characters for readability)
+      SHORT_SHA=$(echo "$(params.COMMIT_SHA)" | cut -c1-8)
+      IMAGE_WITH_TAG="$(params.IMAGE_NAME):$SHORT_SHA"
+
+      echo "🏗️ Building Docker image..."
+      echo "📦 Image: $IMAGE_WITH_TAG"
+      echo "📁 Context: $(params.CONTEXT)"
+      echo "🐳 Dockerfile: $(params.DOCKERFILE)"
+
+      # Build the image
+      buildah --storage-driver=$(params.STORAGE_DRIVER) bud \
+        --format=$(params.FORMAT) \
+        --tls-verify=$(params.TLSVERIFY) \
+        --no-cache \
+        -f $(params.DOCKERFILE) \
+        -t $IMAGE_WITH_TAG \
+        $(params.CONTEXT)
+
+      echo "✅ Build completed successfully"
+
+      # Push the image to Docker Hub
+      echo "🚀 Pushing image to Docker Hub..."
+      buildah --storage-driver=$(params.STORAGE_DRIVER) push \
+        --tls-verify=$(params.TLSVERIFY) \
+        --digestfile /tmp/image-digest \
+        $IMAGE_WITH_TAG \
+        docker://$IMAGE_WITH_TAG
+
+      # Store results
+      cat /tmp/image-digest | tee $(results.IMAGE_DIGEST.path)
+      echo -n "$IMAGE_WITH_TAG" | tee $(results.IMAGE_URL.path)
+
+      echo "✅ Successfully pushed image: $IMAGE_WITH_TAG"
+    volumeMounts:
+    - name: varlibcontainers
+      mountPath: /var/lib/containers
+    securityContext:
+      privileged: true
+    env:
+    - name: STORAGE_DRIVER
+      value: $(params.STORAGE_DRIVER)
+  volumes:
+  - name: varlibcontainers
+    emptyDir: {}
+---

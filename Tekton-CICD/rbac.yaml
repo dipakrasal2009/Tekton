@@ -1,0 +1,24 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: tekton-ci
+  name: ci-pipeline-role
+rules:
+- apiGroups: [""]
+  resources: ["pods", "persistentvolumeclaims", "secrets", "configmaps"]
+  verbs: ["get", "list", "create", "update", "delete", "patch", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ci-pipeline-binding
+  namespace: tekton-ci
+subjects:
+- kind: ServiceAccount
+  name: ci-pipeline-sa
+  namespace: tekton-ci
+roleRef:
+  kind: Role
+  name: ci-pipeline-role
+  apiGroup: rbac.authorization.k8s.io
+---

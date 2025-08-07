@@ -1,0 +1,33 @@
+apiVersion: tekton.dev/v1beta1
+kind: PipelineRun
+metadata:
+  generateName: ci-simple-run-
+  namespace: tekton-ci
+  annotations:
+    tekton.dev/displayName: "Simple CI Pipeline Run"
+spec:
+  pipelineRef:
+    name: ci-pipeline-simple  # Using the simple pipeline
+  serviceAccountName: ci-pipeline-sa
+  timeout: "45m0s"
+
+  params:
+    - name: git-url
+      value: "https://github.com/dipakrasal2009/ip-viewer-app.git"  # Public test repository
+    - name: git-revision
+      value: "main"
+    - name: image-name
+      value: "dipakrasal2009/test-simple"  # ⚠️ REPLACE WITH YOUR DOCKER HUB USERNAME
+    - name: dockerfile-path
+      value: "./Dockerfile"
+    - name: build-context
+      value: "."
+
+  workspaces:
+    - name: source-workspace
+      persistentVolumeClaim:
+        claimName: ci-workspace-pvc
+    - name: docker-config
+      secret:
+        secretName: docker-config-secret
+---

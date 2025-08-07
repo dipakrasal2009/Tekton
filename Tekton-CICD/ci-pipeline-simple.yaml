@@ -1,0 +1,86 @@
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: ci-pipeline-simple
+  namespace: tekton-ci
+  annotations:
+    tekton.dev/displayName: "Simple CI Pipeline (Alpine Git + Buildah)"
+    tekton.dev/tags: ci, git, docker, build
+spec:
+  description: |
+    This SIMPLE CI pipeline works reliably by using standard images:
+    1. Clone source code from GitHub repository (using alpine/git)
+    2. Build Docker image using Dockerfile with commit SHA as tag
+    3. Push the built image to Docker Hub registry
+
+  params:
+    - name: git-url
+      description: Git repository URL
+      type: string
+      default: "https://github.com/your-username/your-repo.git"
+    - name: git-revision
+      description: Git revision (branch, tag, or commit SHA)
+      type: string
+      default: "main"
+    - name: image-name
+      description: Docker image name (without tag) - e.g. your-dockerhub-username/your-app
+      type: string
+      default: "your-dockerhub-username/your-app"
+    - name: dockerfile-path
+      description: Path to Dockerfile relative to repository root
+      type: string
+      default: "./Dockerfile"
+    - name: build-context
+      description: Build context path relative to repository root
+      type: string
+      default: "."
+
+  workspaces:
+    - name: source-workspace
+      description: Shared workspace for source code
+    - name: docker-config
+      description: Docker configuration for pushing images
+
+  tasks:
+    # Task 1: Clone Git Repository (USING SIMPLE ALPINE/GIT TASK)
+    - name: clone-repository
+      taskRef:
+        name: simple-git-clone  # Using the simple, reliable task
+      params:
+        - name: url
+          value: $(params.git-url)
+        - name: revision
+          value: $(params.git-revision)
+        - name: deleteExisting
+          value: "true"
+        - name: verbose
+          value: "true"
+      workspaces:
+        - name: output
+          workspace: source-workspace
+
+    # Task 2: Build and Push Docker Image with Commit SHA Tag
+    - name: build-and-push-image
+      taskRef:
+        name: buildah-build-push
+      runAfter:
+        - clone-repository
+      params:
+        - name: IMAGE_NAME
+          value: $(params.image-name)
+        - name: COMMIT_SHA
+          value: "$(tasks.clone-repository.results.commit)"
+        - name: DOCKERFILE
+          value: $(params.dockerfile-path)
+        - name: CONTEXT
+          value: $(params.build-context)
+        - name: TLSVERIFY
+          value: "false"  # Set to true in production
+        - name: STORAGE_DRIVER
+          value: "vfs"    # Use vfs for compatibility
+      workspaces:
+        - name: source
+          workspace: source-workspace
+        - name: dockerconfig
+          workspace: docker-config
+---
