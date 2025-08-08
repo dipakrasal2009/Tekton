@@ -1,0 +1,59 @@
+apiVersion: triggers.tekton.dev/v1beta1
+kind: TriggerTemplate
+metadata:
+  name: github-push-template
+  namespace: tekton-ci
+spec:
+  params:
+    - name: git-repo-url
+      description: The git repository url
+    - name: git-revision
+      description: The git revision (commit SHA)
+    - name: git-repo-name
+      description: The git repository name
+    - name: git-repo-owner
+      description: The git repository owner
+    - name: git-commit-message
+      description: The git commit message
+      default: "No commit message"
+    - name: git-commit-author
+      description: The git commit author
+      default: "Unknown"
+  resourcetemplates:
+    - apiVersion: tekton.dev/v1beta1
+      kind: PipelineRun
+      metadata:
+        generateName: webhook-triggered-run-
+        namespace: tekton-ci
+        labels:
+          tekton.dev/pipeline: ci-pipeline-simple
+          trigger.tekton.dev: github-webhook
+        annotations:
+          tekton.dev/git-repo: $(tt.params.git-repo-url)
+          tekton.dev/git-commit: $(tt.params.git-revision)
+          tekton.dev/commit-message: $(tt.params.git-commit-message)
+          tekton.dev/commit-author: $(tt.params.git-commit-author)
+      spec:
+        pipelineRef:
+          name: ci-pipeline-simple
+        serviceAccountName: ci-pipeline-sa
+        timeout: "45m0s"
+        params:
+          - name: git-url
+            value: $(tt.params.git-repo-url)
+          - name: git-revision
+            value: $(tt.params.git-revision)
+          - name: image-name
+            value: "$(tt.params.git-repo-owner)/$(tt.params.git-repo-name)"  # Uses owner/repo as image name
+          - name: dockerfile-path
+            value: "./Dockerfile"
+          - name: build-context
+            value: "."
+        workspaces:
+          - name: source-workspace
+            persistentVolumeClaim:
+              claimName: ci-workspace-pvc
+          - name: docker-config
+            secret:
+              secretName: docker-config-secret
+---

@@ -1,0 +1,87 @@
+#!/bin/bash
+# expose-webhook.sh - Expose EventListener for GitHub webhook
+
+set -e
+
+echo "🌐 Exposing EventListener for GitHub Webhook"
+echo "============================================="
+
+# Check if EventListener is running
+echo "📋 Checking EventListener status..."
+kubectl wait --for=condition=ready pod -l eventlistener=github-webhook-listener -n tekton-ci --timeout=60s
+
+# Get service info
+echo "📊 EventListener Service Info:"
+kubectl get svc el-github-webhook-listener -n tekton-ci
+
+echo ""
+echo "🔧 Choose your exposure method:"
+echo "1. Port Forward (for testing)"
+echo "2. ngrok (for public access)"
+echo ""
+
+read -p "Enter your choice (1 or 2): " choice
+
+case $choice in
+  1)
+    echo "🔌 Starting port forward..."
+    echo "EventListener will be accessible at: http://localhost:8080"
+    echo "⚠️  This is only for local testing. GitHub webhook needs public URL."
+    echo "Press Ctrl+C to stop port forwarding"
+    kubectl port-forward svc/el-github-webhook-listener -n tekton-ci 8080:8080
+    ;;
+  2)
+    echo "🚀 Setting up ngrok tunnel..."
+
+    # Check if ngrok is installed
+    if ! command -v ngrok &> /dev/null; then
+      echo "❌ ngrok is not installed. Please install it first:"
+      echo "   https://ngrok.com/download"
+      exit 1
+    fi
+
+    echo "📝 Starting port forward in background..."
+    kubectl port-forward svc/el-github-webhook-listener -n tekton-ci 8080:8080 &
+    PORT_FORWARD_PID=$!
+
+    sleep 3
+
+    echo "🌍 Starting ngrok tunnel..."
+    echo "Your GitHub webhook URL will be shown below:"
+    echo ""
+
+    # Start ngrok and capture the URL
+    ngrok http 8080 --log=stdout &
+    NGROK_PID=$!
+
+    # Cleanup function
+    cleanup() {
+      echo ""
+      echo "🧹 Cleaning up..."
+      kill $PORT_FORWARD_PID 2>/dev/null || true
+      kill $NGROK_PID 2>/dev/null || true
+      exit 0
+    }
+
+    trap cleanup SIGINT SIGTERM
+
+    echo ""
+    echo "📋 Next steps:"
+    echo "1. Copy the ngrok HTTPS URL from above (e.g., https://abc123.ngrok.io)"
+    echo "2. Go to your GitHub repo → Settings → Webhooks → Add webhook"
+    echo "3. Set Payload URL to: [YOUR_NGROK_URL] (without any path)"
+    echo "4. Set Content type to: application/json"
+    echo "5. Set Secret to: mysecrettoken123"
+    echo "6. Select 'Just the push event'"
+    echo "7. Click 'Add webhook'"
+    echo ""
+    echo "Press Ctrl+C to stop when done testing"
+
+    wait
+    ;;
+  *)
+    echo "❌ Invalid choice"
+    exit 1
+    ;;
+esac
+
