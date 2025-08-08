@@ -9,12 +9,11 @@ metadata:
     tekton.dev/pipelines.minVersion: "0.17.0"
     tekton.dev/categories: Git
     tekton.dev/tags: git
-    tekton.dev/displayName: "Simple Git Clone (Alpine)"
+    tekton.dev/displayName: "Simple Git Clone (Alpine) - Fixed"
 spec:
   description: >-
     This Task clones a repo from the provided URL using alpine/git image.
-    This is a simple, reliable alternative that avoids authentication issues
-    with Tekton's official git-init images.
+    Fixed to handle both branch names and commit SHAs properly.
   params:
     - name: url
       description: Repository URL to clone from.
@@ -41,22 +40,22 @@ spec:
       description: The git repo will be cloned onto this workspace.
   steps:
     - name: clone
-      image: alpine/git:latest  # Using reliable alpine/git image
+      image: alpine/git:latest
       workingDir: /workspace
       script: |
         #!/bin/sh
         set -e
-
+        
         if [ "$(params.verbose)" = "true" ]; then
           set -x
         fi
-
+        
         CHECKOUT_DIR="$(workspaces.output.path)"
-
+        
         echo "🔍 Repository URL: $(params.url)"
         echo "📋 Revision: $(params.revision)"
         echo "📁 Checkout Directory: $CHECKOUT_DIR"
-
+        
         # Clean existing directory if requested
         if [ "$(params.deleteExisting)" = "true" ] && [ -d "$CHECKOUT_DIR" ]; then
           echo "🧹 Cleaning existing directory..."
@@ -64,22 +63,26 @@ spec:
           rm -rf "$CHECKOUT_DIR"/.[!.]*
           rm -rf "$CHECKOUT_DIR"/..?*
         fi
-
-        # Clone the repository
+        
+        # Clone the repository (WITHOUT --branch flag)
         echo "📥 Cloning repository..."
-        git clone "$(params.url)" --branch "$(params.revision)" --single-branch "$CHECKOUT_DIR"
-
+        git clone "$(params.url)" "$CHECKOUT_DIR"
+        
         # Change to the cloned directory
         cd "$CHECKOUT_DIR"
-
+        
+        # Checkout the specific revision (works for both branches and commit SHAs)
+        echo "🔄 Checking out revision: $(params.revision)"
+        git checkout "$(params.revision)"
+        
         # Get the commit SHA
         COMMIT_SHA=$(git rev-parse HEAD)
         echo "📍 Commit SHA: $COMMIT_SHA"
-
+        
         # Save results
         echo -n "$COMMIT_SHA" > /tekton/results/commit
         echo -n "$(params.url)" > /tekton/results/url
-
+        
         echo "✅ Successfully cloned repository"
         echo "📊 Repository info:"
         echo "   URL: $(params.url)"
@@ -87,3 +90,4 @@ spec:
         echo "   Commit: $COMMIT_SHA"
         echo "   Files: $(ls -la $CHECKOUT_DIR | wc -l) items"
 ---
+
