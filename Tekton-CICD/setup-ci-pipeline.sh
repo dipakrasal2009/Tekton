@@ -66,11 +66,11 @@ echo "  💾 Creating PVC..."
 kubectl apply -f pvc.yaml
 
 echo "  📋 Creating tasks..."
-kubectl apply -f git-clone-task.yaml
+kubectl apply -f simple-git-clone-task.yaml
 kubectl apply -f buildah-task.yaml
 
 echo "  🔄 Creating pipeline..."
-kubectl apply -f ci-pipeline.yaml
+kubectl apply -f ci-pipeline-simple.yaml
 
 echo ""
 echo "🎉 CI Pipeline setup completed successfully!"

@@ -1,0 +1,18 @@
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: cd-pipeline
+  namespace: tekton-ci
+spec:
+  params:
+    - name: image
+      description: Full image reference e.g. user/app:sha
+      type: string
+  tasks:
+    - name: deploy
+      taskRef:
+        name: deploy-to-k8s
+      params:
+        - name: image
+          value: $(params.image)
+

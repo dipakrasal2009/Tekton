@@ -6,7 +6,7 @@ metadata:
 spec:
   params:
     - name: git-repo-url
-      description: The git repository url
+      description: The git repository URL
     - name: git-revision
       description: The git revision (commit SHA)
     - name: git-repo-name
@@ -26,7 +26,7 @@ spec:
         generateName: webhook-triggered-run-
         namespace: tekton-ci
         labels:
-          tekton.dev/pipeline: ci-pipeline-simple
+          tekton.dev/pipeline: ci-cd-pipeline   # updated to point to the CI-CD runner
           trigger.tekton.dev: github-webhook
         annotations:
           tekton.dev/git-repo: $(tt.params.git-repo-url)
@@ -35,16 +35,16 @@ spec:
           tekton.dev/commit-author: $(tt.params.git-commit-author)
       spec:
         pipelineRef:
-          name: ci-pipeline-simple
+          name: ci-cd-pipeline                 # run the CI-CD combined pipeline
         serviceAccountName: ci-pipeline-sa
-        timeout: "45m0s"
+        timeout: "60m0s"
         params:
           - name: git-url
             value: $(tt.params.git-repo-url)
           - name: git-revision
             value: $(tt.params.git-revision)
           - name: image-name
-            value: "$(tt.params.git-repo-owner)/$(tt.params.git-repo-name)"  # Uses owner/repo as image name
+            value: "$(tt.params.git-repo-owner)/$(tt.params.git-repo-name)" 
           - name: dockerfile-path
             value: "./Dockerfile"
           - name: build-context
@@ -56,4 +56,4 @@ spec:
           - name: docker-config
             secret:
               secretName: docker-config-secret
----
+
