@@ -1,25 +1,29 @@
-# Tekton CI Pipeline with GitHub Webhook Automation
+# Tekton CI/CD Pipeline with GitHub Webhook Automation
 
-This project provides a complete Continuous Integration (CI) pipeline using Tekton that automatically builds and pushes Docker images to Docker Hub whenever you push code to your GitHub repository.
+This project provides a complete Continuous Integration and Continuous Deployment (CI/CD) pipeline using Tekton that automatically builds Docker images, pushes them to Docker Hub, and deploys your application to Kubernetes whenever you push code to your GitHub repository.
 
 ## 🎯 What This Pipeline Does
 
-1. **Monitors GitHub Repository** - Listens for push events via webhooks
-2. **Clones Source Code** - Automatically clones the exact commit that triggered the pipeline
-3. **Builds Docker Image** - Uses your Dockerfile to build container images
-4. **Tags with Commit SHA** - Tags images with short commit SHA (e.g., `myapp:a1b2c3d4`)
-5. **Pushes to Docker Hub** - Automatically publishes images to your Docker Hub repository
+### Continuous Integration (CI)
+1. **Monitors GitHub Repository** – Listens for push events via webhooks.
+2. **Clones Source Code** – Automatically clones the exact commit that triggered the pipeline.
+3. **Builds Docker Image** – Uses your Dockerfile to build container images.
+4. **Tags with Commit SHA** – Tags images with short commit SHA (e.g., `myapp:a1b2c3d4`).
+5. **Pushes to Docker Hub** – Publishes images to your Docker Hub repository.
+
+### Continuous Deployment (CD)
+6. **Patches Kubernetes Deployment** – Updates your app with the newly built image tag.
+7. **Manages Rollout** – Kubernetes safely deploys the new version to your cluster.
+8. **Verifies Deployment** – Confirms the rollout completed successfully.
 
 ## 📋 Prerequisites
 
-Before starting, ensure you have:
-
-- ✅ **Kubernetes cluster** (minikube, kind, or cloud cluster)
-- ✅ **kubectl** configured to access your cluster
-- ✅ **tkn CLI** installed (Tekton CLI)
-- ✅ **Docker Hub account** with username and password/token
-- ✅ **GitHub repository** with a Dockerfile
-- ✅ **ngrok account** (for webhook exposure) - Sign up at https://ngrok.com
+- ✅ **Kubernetes cluster** (minikube, kind, or cloud cluster).
+- ✅ **kubectl** configured to access your cluster.
+- ✅ **tkn CLI** installed (Tekton CLI).
+- ✅ **Docker Hub account** with username and password/token.
+- ✅ **GitHub repository** with a Dockerfile.
+- ✅ **ngrok account** (for webhook exposure) – Sign up at <https://ngrok.com>.
 
 ## 🚀 Step-by-Step Deployment Guide
 
@@ -27,45 +31,23 @@ Before starting, ensure you have:
 
 #### Step 1: Deploy Core Tekton CI Pipeline
 ```bash
-# This installs Tekton Pipelines and sets up the basic CI components
-./setup-ci-pipeline.sh
+./setup-ci-pipeline.sh   # installs Tekton and CI components
 ```
-
-**What this does:**
-- Installs Tekton Pipelines in your cluster
-- Creates `tekton-ci` namespace
-- Deploys tasks, pipeline, secrets, RBAC, and storage
 
 #### Step 2: Configure Docker Hub Credentials
 ```bash
-# Edit the secrets file with your Docker Hub credentials
-nano secrets.yaml
-
-# Update these lines:
-# username: "YOUR_DOCKERHUB_USERNAME"  → username: "your-actual-username"
-# password: "YOUR_DOCKERHUB_PASSWORD"  → password: "your-actual-password-or-token"
-
-# Apply the updated secrets
+nano secrets.yaml  # update username & password, then
 kubectl apply -f secrets.yaml
 ```
 
 #### Step 3: Test Manual Pipeline Run
 ```bash
-# Edit the pipeline run with your repository details
-nano simple-pipelinerun.yaml
-
-# Update these parameters:
-# git-url: "https://github.com/your-username/your-repo.git"
-# image-name: "your-dockerhub-username/your-app-name"
-
-# Run the pipeline manually to test
+nano simple-pipelinerun.yaml  # set git-url & image-name
 kubectl create -f simple-pipelinerun.yaml
 
-# Monitor the pipeline execution
+# watch logs
 tkn pipelinerun logs --last -n tekton-ci -f
 ```
-
-**✅ Verify:** Pipeline should successfully clone, build, and push your Docker image.
 
 ---
 
@@ -73,207 +55,114 @@ tkn pipelinerun logs --last -n tekton-ci -f
 
 #### Step 4: Deploy Webhook Components
 ```bash
-cd webhooks/
-
-# Deploy all webhook automation components
-./deploy-webhook.sh
+cd webhooks && ./deploy-webhook.sh
 ```
 
-**What this does:**
-- Installs Tekton Triggers
-- Creates EventListener, TriggerBinding, TriggerTemplate
-- Sets up webhook secret for GitHub authentication
-
-#### Step 5: Expose Webhook Endpoint
+#### Step 5: Expose Webhook Endpoint via ngrok
 ```bash
-# This script provides options to expose your webhook publicly
-./expose-webhook.sh
-
-# Choose option 2 for ngrok (public access needed for GitHub)
-# Follow the prompts to set up ngrok tunnel
+./expose-webhook.sh   # choose ngrok option and follow prompts
 ```
-
-**Important:** You'll need your ngrok authtoken. Get it from: https://dashboard.ngrok.com/get-started/your-authtoken
 
 #### Step 6: Configure GitHub Webhook
-1. **Go to your GitHub repository**
-2. **Navigate to:** Settings → Webhooks → Add webhook
-3. **Configure webhook:**
-   - **Payload URL:** `https://your-ngrok-url.ngrok.io` (from Step 5)
-   - **Content type:** `application/json`
-   - **Secret:** `mysecrettoken123` (or update in `webhook-secret.yaml`)
-   - **Events:** Select "Just the push event"
-   - **Active:** ✅ Checked
-4. **Click "Add webhook"**
+Add a webhook in your repo with:
+- **Payload URL:** `https://<YOUR_NGROK_URL>.ngrok.io`
+- **Content type:** `application/json`
+- **Secret:** same as in `webhook-secret.yaml`.
 
 #### Step 7: Test Automated Pipeline
 ```bash
-# Make any change to your repository
-echo "# Test change" >> README.md
-git add .
-git commit -m "Test automated pipeline trigger"
-git push origin main
+echo "# test" >> README.md
+git add . && git commit -m "test webhook" && git push
 
-# Watch your pipeline automatically trigger
-tkn pipelinerun ls -n tekton-ci
+# watch run
 tkn pipelinerun logs --last -n tekton-ci -f
+```
+
+---
+
+### Phase 3: Continuous Deployment (CD) Setup
+
+#### Step 8: Deploy CD Components
+```bash
+kubectl apply -f cd-deploy-task.yaml
+kubectl apply -f cd-pipeline.yaml
+kubectl apply -f ci-cd-pipeline.yaml
+```
+
+#### Step 9: Create Initial Kubernetes Deployment
+```bash
+kubectl apply -f k8s-deployment.yaml
+```
+
+#### Step 10: Update Webhook Template to Use CI-CD Pipeline
+```bash
+nano webhooks/webhook-trigger-template.yaml  # set pipelineRef to ci-cd-pipeline
+kubectl apply -f webhooks/webhook-trigger-template.yaml
+```
+
+#### Step 11: Test Full CI/CD Flow
+```bash
+git commit --allow-empty -m "trigger full pipeline" && git push
+
+tkn pipelinerun logs --last -n tekton-ci -f
+kubectl rollout status deployment/ip-viewer-app -n default
 ```
 
 ---
 
 ## 📁 File Structure
-
 ```
 Tekton-CICD/
-├── buildah-task.yaml              # Docker build & push task
-├── ci-pipeline-simple.yaml        # Main CI pipeline definition
-├── simple-git-clone-task.yaml     # Git clone task (fixed for commit SHAs)
-├── simple-pipelinerun.yaml        # Manual pipeline run template
-├── namespace.yaml                 # Tekton CI namespace
-├── secrets.yaml                   # Docker Hub credentials
-├── serviceaccount.yaml            # Service account for pipeline
-├── rbac.yaml                      # Role-based access control
-├── pvc.yaml                       # Persistent volume for workspace
-├── setup-ci-pipeline.sh           # Core pipeline deployment script
-└── webhooks/                      # GitHub webhook automation
-    ├── deploy-webhook.sh           # Deploy webhook components
-    ├── expose-webhook.sh           # Expose webhook endpoint
-    ├── test-webhook.sh             # Test webhook locally
-    ├── webhook-event-listener.yaml # GitHub webhook listener
-    ├── webhook-trigger-*.yaml      # Webhook trigger components
-    └── triggers-*.yaml             # RBAC for webhook components
+├── buildah-task.yaml           # Build & push image
+├── ci-pipeline-simple.yaml     # CI pipeline
+├── ci-cd-pipeline.yaml         # Combined CI/CD pipeline
+├── cd-deploy-task.yaml         # CD deploy task
+├── cd-pipeline.yaml            # CD pipeline
+├── k8s-deployment.yaml         # App Deployment manifest
+├── simple-git-clone-task.yaml  # Git clone task
+├── simple-pipelinerun.yaml     # Manual run template
+├── secrets.yaml                # Docker Hub creds
+├── serviceaccount.yaml         # Pipeline SA
+├── rbac.yaml                   # RBAC rules
+├── setup-ci-pipeline.sh        # Install script
+└── webhooks/                   # Webhook assets
 ```
 
-## 🔧 Configuration Files to Customize
+## 🔧 Key Configurations
+- **`secrets.yaml`** – Docker Hub `username` & `password`.
+- **`simple-pipelinerun.yaml`** – `git-url`, `image-name`.
+- **`webhook-secret.yaml`** – secure `secretToken`.
+- **`k8s-deployment.yaml`** – container `image` & `containerPort`.
 
-### 1. Docker Hub Credentials (`secrets.yaml`)
-```yaml
-stringData:
-  username: "your-dockerhub-username"    # ← Update this
-  password: "your-dockerhub-password"    # ← Update this
-```
-
-### 2. Repository Settings (`simple-pipelinerun.yaml`)
-```yaml
-params:
-  - name: git-url
-    value: "https://github.com/your-username/your-repo.git"  # ← Update this
-  - name: image-name
-    value: "your-dockerhub-username/your-app"               # ← Update this
-```
-
-### 3. Webhook Secret (`webhook-secret.yaml`)
-```yaml
-stringData:
-  secretToken: "mysecrettoken123"    # ← Change to a secure token
-```
-
-## 📊 Monitoring and Troubleshooting
-
-### Monitor Pipeline Runs
+## 📊 Monitoring & Troubleshooting
 ```bash
-# List all pipeline runs
+# Pipelines
 tkn pipelinerun ls -n tekton-ci
-
-# Follow latest pipeline logs
+# Live logs
 tkn pipelinerun logs --last -n tekton-ci -f
-
-# View webhook-triggered runs only
-kubectl get pipelinerun -n tekton-ci -l trigger.tekton.dev=github-webhook
+# Deployment rollout
+kubectl rollout status deployment/ip-viewer-app -n default
 ```
 
-### Monitor Webhook Events
-```bash
-# Check EventListener status
-kubectl get pods -n tekton-ci -l eventlistener=github-webhook-listener
+Common fixes:
+- **ImagePullBackOff:** check image tag matches push.
+- **Webhook not firing:** confirm ngrok tunnel & GitHub delivery logs.
+- **RBAC errors:** ensure `ci-pipeline-sa` has edit/patch permissions.
 
-# View EventListener logs
-kubectl logs -n tekton-ci -l eventlistener=github-webhook-listener
+## 💡 Security Notes
+- Use Docker Hub access tokens (not passwords).
+- Regenerate a strong webhook secret: `openssl rand -hex 32`.
+- Replace ngrok with Ingress for production clusters.
 
-# Test webhook locally
-./webhooks/test-webhook.sh
-```
+## 🌐 Service Exposure
+- **Minikube:** NodePort service.
+- **OpenShift:** Route resource for external URL.
 
-### Common Issues and Solutions
+## 🎉 Success Checklist
+- ✅ CI builds & pushes image.
+- ✅ CD patches deployment with new tag.
+- ✅ Kubernetes rollout succeeds.
+- ✅ App accessible with latest change.
 
-#### Issue: Pipeline Fails with Git Clone Error
-**Solution:** Make sure your repository is public or add GitHub credentials for private repos.
-
-#### Issue: Docker Push Fails
-**Solution:** Verify Docker Hub credentials in `secrets.yaml` and ensure the repository exists.
-
-#### Issue: Webhook Not Triggering
-**Solution:** 
-- Check GitHub webhook delivery logs
-- Verify ngrok tunnel is active
-- Ensure EventListener pod is running
-
-#### Issue: EventListener CrashLoopBackOff
-**Solution:** Apply RBAC permissions:
-```bash
-kubectl apply -f webhooks/triggers-el-clusterbinding.yaml
-kubectl apply -f webhooks/triggers-el-rolesbinding.yaml
-```
-
-## 🎯 Pipeline Workflow
-
-```mermaid
-graph LR
-    A[Developer pushes code] --> B[GitHub sends webhook]
-    B --> C[Tekton EventListener receives]
-    C --> D[Pipeline triggered automatically]
-    D --> E[Clone repository at commit SHA]
-    E --> F[Build Docker image]
-    F --> G[Tag with commit SHA]
-    G --> H[Push to Docker Hub]
-    H --> I[Pipeline completes successfully]
-```
-
-## 🔒 Security Considerations
-
-### For Production Use:
-
-1. **Webhook Secret:** Change default secret in `webhook-secret.yaml`
-   ```bash
-   # Generate secure token
-   openssl rand -hex 32
-   ```
-
-2. **Docker Credentials:** Use Docker Hub access tokens instead of passwords
-
-3. **Repository Access:** Use SSH keys or GitHub tokens for private repositories
-
-4. **Network Security:** Use proper ingress instead of ngrok for production
-
-5. **Resource Limits:** Set resource limits in task definitions
-
-## 📚 Additional Resources
-
-- [Tekton Documentation](https://tekton.dev/docs/)
-- [Tekton Triggers Guide](https://tekton.dev/docs/triggers/)
-- [GitHub Webhooks Documentation](https://docs.github.com/en/developers/webhooks-and-events/webhooks)
-- [Docker Hub Access Tokens](https://docs.docker.com/docker-hub/access-tokens/)
-
-## 🎉 Success Indicators
-
-Your pipeline is working correctly when:
-
-- ✅ Manual pipeline runs complete successfully
-- ✅ Docker images appear in Docker Hub with commit SHA tags
-- ✅ GitHub webhook shows successful deliveries
-- ✅ Pushing code automatically triggers pipeline runs
-- ✅ EventListener pod remains in `Running` state
-
-## 📞 Support
-
-If you encounter issues:
-
-1. Check the troubleshooting section above
-2. Review pipeline and webhook logs
-3. Verify all configuration files have correct values
-4. Ensure prerequisites are met
-
----
-
-**Congratulations!** 🎉 You now have a fully automated CI pipeline that builds and deploys your applications with every code change!
+Enjoy your fully-automated Tekton CI/CD pipeline! 🚀
 
